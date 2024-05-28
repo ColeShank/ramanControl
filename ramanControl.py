@@ -45,7 +45,7 @@ plt.ion()
 # first, do some house keeping
 # prompt the user for parent directory, then make folder with todays date
 try: 
-    parentDir = askdirectory(title='Select poject folder') # shows dialog box and return the path
+    parentDir = askdirectory(title='Select project folder') # shows dialog box and return the path
     dataDir = str(date.today())
     path = os.path.join(parentDir, dataDir)
     os.mkdir(path)
@@ -108,7 +108,7 @@ def takeSpectrum(start, stop, fname):
     fpath = os.path.join(path, fname)
     file = open(fpath, 'w')
     file.write('wavelength(nm), raman shift(cm^-1), intensity(arb) \n')
-    # assumes start and stop input in cm^-1 shift, since thats how we normallyt talk abotu it
+    # assumes start and stop input in cm^-1 shift, since thats how we normally talk about it
     # start by converting start and stop to nm
     # nmStart = wavNumToNM(float(start))
     # nmStop = wavNumToNM(float(stop))
@@ -195,7 +195,7 @@ class Monochromator(object):
     def setVelocity(self,velocity):
         self.sendcommand('V ' + str(velocity))
         
-    ### checks if the Monochromator is moving (returns True of False) 
+    ### checks if the Monochromator is moving (returns True or False) 
     def moving(self):
         self.sendcommand('^')
         a = self.readout()
@@ -210,9 +210,9 @@ class Monochromator(object):
         try:
             self.sendcommand('X')
             if self.readout() == None:
-                print('Timeout occured')
+                print('Timeout occurred')
         except:
-            print('Timeout occured')
+            print('Timeout occurred')
             
     def checkLimitSwitches(self):
         self.sendcommand("]")
