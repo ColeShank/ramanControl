@@ -8,7 +8,6 @@ To Do:
 -initialize values
 -error handling for wrong inputs
 -fix ROI bug to remove stupid for loops
--add update loop for ccd temp
 -add calibration 
 -add save button on camera control
 -save spectrums as csv
@@ -39,6 +38,8 @@ import logging, configparser, time, serial
 import datetime as dt
 from PyQt5 import QtGui, QtCore, QtWidgets
 import PyQt5.QtWidgets as QWidgets
+from PyQt5.QtCore import QTimer
+
 
 from tkinter import Tk
 from tkinter.filedialog import askdirectory
@@ -341,24 +342,16 @@ class Monochromator(object):
 class Ui_Form(QWidgets.QWidget):
     ### All UI elements go here
     def __init__(self,cam):
-        # self.upate_timer = QTimer(self)
-        # self.upate_timer.setInterval(100) # milliseconds i believe
-        # self.upate_timer.setSingleShot(False)
-        # self.upate_timer.timeout.connect(self.update_label)
+        # self.update_timer = QTimer(self)
+        # self.update_timer.setInterval(100) # milliseconds i believe
+        # self.update_timer.setSingleShot(False)
+        # self.update_timer.timeout.connect(self.update_label)
 
         ### create main window
 
         QWidgets.QWidget.__init__(self)
         self.setWindowTitle('Steve control')
         self.setWindowIcon(QtGui.QIcon('icon.png'))
-        
-
-        ## create status bar
-        #def createStatusBar(self):
-        #    statusBar().showMessage(tr("Ready"))
-        #statusbar=QWidgets.QStatusBar()
-        #statusbar.addWidget(QtWidgets.QLabel("Test status"))
-        #QWidgets.QStatusBar.showMessage('test status',30)
 
         ### create tabbed interface
 
@@ -372,7 +365,14 @@ class Ui_Form(QWidgets.QWidget):
         tab_widget.addTab(tab1, "Spectrometer Control")
         tab_widget.addTab(tab2, "Camera Control") 
         tab_widget.addTab(tab3, "Raman") 
-
+        
+        self.update_timer = QTimer(self)
+        self.update_timer.start()
+        self.update_timer.setInterval(60000) # milliseconds
+        self.update_timer.setSingleShot(False)
+        self.update_timer.timeout.connect(lambda: self.camTempLabel.setText(str(cam.get_attribute_value('Sensor Temperature Reading')) + " C"))
+        
+        
         # ### create label for current mono wavelength
 		
         # self.currentMonoWavelengthLabel = QtWidgets.QLabel(self)
