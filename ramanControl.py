@@ -1,5 +1,6 @@
 '''
-to do: 
+To Do: 
+
 !!!!!!monochromator is incorrect lmao how did you even do that
 -add video mode
 -add actual raman mode lol
@@ -10,11 +11,27 @@ to do:
 -add update loop for ccd temp
 -add calibration 
 -add save button on camera control
+-save spectrums as csv
 
 known issue: mono control freq loses communication. needs current pos in file to match current positon 
 usually fails if commercial softaware is used
 
 '''
+
+'''
+Questions and Notes and Such:
+
+What is a picture vs a Raman spectrum?
+
+Does monochromator require 999.9 style input or can this be relaxed?
+Is it possible to automatically fill 0's after decimal if not input?
+
+
+
+'''
+# REQUIRED PACKAGES:  pylablib, ???
+
+
 # mono imports
 import sys
 sys.path.append('C:/Users/nickp/anaconda3/')
@@ -50,13 +67,13 @@ try:
     path = os.path.join(parentDir, dataDir)
     os.mkdir(path)
 except FileExistsError:
-    print('using folder from earlier today')
+    print('Using folder from earlier today')
 
 
 laser = 532# hard coded bullshit, fix
 
 # def wavNumToNM(wav):
-#     #for a relative shit, not abolsute
+#     #for a relative shift, not absolute
 #     wav = float(wav)
 #     nm = 1/(wav + 1/(laser))
 #     return nm
@@ -128,7 +145,7 @@ def takeSpectrum(start, stop, fname):
         #now figure out what the axis was 
         #yikes
         #remember pos is the detector center, not edge
-        #all of this is ahrd coded but should be switched with a calibration process to do at the start f the day
+        #all of this is hard coded but should be switched with a calibration process to do at the start f the day
         px1 = 799 #center wavelength position
         px2 = 426 # high edge (7nm below)
         deltaL = 22
@@ -142,12 +159,10 @@ def takeSpectrum(start, stop, fname):
             data.append(signal)
             stringToWrite = str(wav) + ','+str(waveNum) + ','+str(signal)+'\n' 
             file.write(stringToWrite)
+    file.close()
+    fpath_csv=os.path.join(path,fname+'.csv')
+    os.rename(fpath,fpath_csv)
     plt.plot(wavNum, data)
-
-
-
-    
-
 
 class Monochromator(object):
     ### Initialises a serial port
@@ -336,6 +351,14 @@ class Ui_Form(QWidgets.QWidget):
         QWidgets.QWidget.__init__(self)
         self.setWindowTitle('Steve control')
         self.setWindowIcon(QtGui.QIcon('icon.png'))
+        
+
+        ## create status bar
+        #def createStatusBar(self):
+        #    statusBar().showMessage(tr("Ready"))
+        #statusbar=QWidgets.QStatusBar()
+        #statusbar.addWidget(QtWidgets.QLabel("Test status"))
+        #QWidgets.QStatusBar.showMessage('test status',30)
 
         ### create tabbed interface
 
@@ -404,10 +427,11 @@ class Ui_Form(QWidgets.QWidget):
         self.expButton = QtWidgets.QPushButton(self)
         self.expButton.setObjectName("expButton")
         self.expButton.clicked.connect(lambda: cam.set_attribute_value("Exposure Time", float(self.exposureTimeInput.text())))
-        self.expButton.setText("send exposure time (s) ")
+        self.expButton.setText("Send exposure time (s)")
 
 
-
+        
+        
         ### create picture button
         self.camButton = QtWidgets.QPushButton(self)
         self.camButton.setObjectName("camButton")
@@ -443,7 +467,7 @@ class Ui_Form(QWidgets.QWidget):
         ### create file name input
         self.fname = QtWidgets.QLineEdit(self)
         self.fname.setMaxLength(50)
-        self.fname.setInputMask("file name")
+        #self.fname.setInputMask("Nxxxxxxxxxxxxxxxxxxxxxx")
         self.fname.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
         self.fname.textChanged.emit(self.fname.text())
 
@@ -451,7 +475,7 @@ class Ui_Form(QWidgets.QWidget):
         self.ramanButton = QtWidgets.QPushButton(self)
         self.ramanButton.setObjectName("ramanButton")
         self.ramanButton.clicked.connect(lambda: takeSpectrum(self.startInput.text(), self.stopInput.text(), self.fname.text()))
-        self.ramanButton.setText("Take raman spectrum")
+        self.ramanButton.setText("Take Raman spectrum")
       
         ### put widgets into the QFormLayout of tab1
 
@@ -465,12 +489,12 @@ class Ui_Form(QWidgets.QWidget):
         ### put widgets into the QFormLayout of tab2
 		
         # p2_vertical.addRow("Move to 524.9 nm:", self.homeButton)
-        p2_vertical.addRow("Current Temp", self.camTempLabel)
-        p2_vertical.addRow("Exposure Time (s)", self.exposureTimeInput)
+        p2_vertical.addRow("Current temp", self.camTempLabel)
+        p2_vertical.addRow("Exposure time (s)", self.exposureTimeInput)
         p2_vertical.addRow(self.expButton)
-        p2_vertical.addRow('file name', self.fname)
-        p2_vertical.addRow("mono position", self.pos)
-        p2_vertical.addRow("take and savecurrent frame", self.camButton)
+        p2_vertical.addRow('File name', self.fname)
+        p2_vertical.addRow("Mono position", self.pos)
+        p2_vertical.addRow("Take and save current frame", self.camButton)
 
         ### put widgets into the QFormLayout of tab3 
         #p3_vertical.addRow("file name", self.fname)
