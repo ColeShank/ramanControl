@@ -7,27 +7,22 @@ To Do:
 -add spectrum time calc
 -error handling for wrong inputs
 -fix ROI bug to remove stupid for loops
--add save button on camera control
 -make it so files don't overwrite, rather append _2, _3, ...
 -add 2D camera mode
--add shift calculator tab
--change laser input to just 999
--also create 2D image from snapshot
+-Add fine calibration mode (popup: warning only perform with laser attenuated by ND wheel)
+-Add sections ideally
+
 
 
 
 Known Issues:
 
 -mono control freq loses communication. needs current pos in file to match current position 
-   -Control seems to work now, and correct position can be obtained via an initial homing procedure
 -usually fails if commercial softaware is used
-   -Idk what this means but this should replace the need for the mcpherson labview software
 
 
 Questions and Notes and Such:
 
--Does monochromator require 999.9 style input or can this be relaxed?
--Is it possible to automatically fill 0's after decimal if not input? Seemingly not required
 
 
 '''
@@ -63,6 +58,7 @@ plt.ion()
 
 # first, do some house keeping
 # prompt the user for parent directory, then make folder with todays date
+''' Deprecated
 try: 
     parentDir = askdirectory(title='Select project folder') # shows dialog box and return the path
     dataDir = str(date.today())
@@ -70,7 +66,7 @@ try:
     os.mkdir(path)
 except FileExistsError:
     print('Using folder from earlier today')
-
+'''
 
 laser = 532# hard coded bullshit, fix
 
@@ -84,16 +80,11 @@ def nmToWav(laserWL, monoWL):
     wav=(1/float(laserWL) - 1/float(monoWL))*float(1e+7)
     return wav
 
-
-
-
-
-
-
 def takeSnapShot(fname, pos):
     # pos is spectrometer position
     img = cam.snap()
-
+    
+    global signal
     signal = []
     pixel = range(len(img[0]))
     # it would be so much better to use the ROI binning. something weird need to fix
@@ -102,12 +93,10 @@ def takeSnapShot(fname, pos):
 
     plt.plot(pixel, signal)
     plt.show()
-
-    # now save this spectrum
-    # this is clunky, you should be able to separate this later
-    fpath = os.path.join(path, fname)
-    file = open(fpath, 'w')
-    file.write('Wavelength(nm), Raman shift(cm^-1), Intensity(arb) \n')
+    
+    global data
+    global wavelen
+    global wavNum
     wavelen =[]
     wavNum = []
     data = []
@@ -115,18 +104,13 @@ def takeSnapShot(fname, pos):
     px2 = 426 # high edge (7nm below)
     deltaL = 22
     pixel = range(0,1340)
-    for i in range(400,1340):
+    for i in range(400,1340): #SHOULD BE (0,1340)?
         wav = pos+ ((deltaL/(px2-px1))*(pixel[i]-px1))
         waveNum = 1/laser - 1/(wav*10**(-7))
         signal = sum(img[:, i])
         wavelen.append(wav)
         wavNum.append(waveNum)
         data.append(signal)
-        stringToWrite = str(wav)+','+str(waveNum)+','+str(signal)+'\n' 
-        file.write(stringToWrite)    
-    file.close()
-    fpath_csv=os.path.join(path,fname+'.csv')
-    os.rename(fpath,fpath_csv)
     return signal
 
 def takeSpectrum(start, stop, fname): 
@@ -153,7 +137,7 @@ def takeSpectrum(start, stop, fname):
     data = []
     #sleep for 1 minute to give time to leave the room
     time.sleep(60)
-    for pos in np.arange(float(start), float(stop), 7):
+    for pos in np.arange(float(start), float(stop), 7):     # SPURIOUS 7
         # Mono1.approachWL(pos)
         img = cam.snap()
         #now figure out what the axis was 
@@ -174,13 +158,25 @@ def takeSpectrum(start, stop, fname):
             stringToWrite = str(wav)+','+str(waveNum)+','+str(signal)+'\n' 
             file.write(stringToWrite)
     file.close()
-    fpath_csv=os.path.join(path,fname+'.csv')
-    os.rename(fpath,fpath_csv)
+    fpath_txt=os.path.join(path,fname+'.txt')
+    os.rename(fpath,fpath_txt)
     plt.plot(wavNum, data)
     plt.show()
     return signal
 
+def saveData(fname):
+    fpath = os.path.join(path,fname)
+    file = open(fpath,'w')
+    file.write('Wavelength(nm), Raman shift(cm^-1), Intensity(arb) \n')
+    for line in np.arange(len(data)):
+        stringToWrite = str(wavelen[line])+','+str(wavNum[line])+','+str(data[line])+'\n' 
+        file.write(stringToWrite)    
+    file.close()
+    fpath_txt=os.path.join(path,fname+'.txt')
+    os.rename(fpath,fpath_txt)
+    
 
+    
 
 class Monochromator(object):
     ### Initialises a serial port
@@ -383,55 +379,56 @@ class MainWindow(QWidgets.QMainWindow):
         p3_vertical = QWidgets.QFormLayout(tab3)
         p4_vertical = QWidgets.QFormLayout(tab4)
         tab_widget.addTab(tab1, "Spectrometer Control")
-        tab_widget.addTab(tab2, "Camera Control") 
-        tab_widget.addTab(tab3, "Raman")
-        tab_widget.addTab(tab4, "File")
+        tab_widget.addTab(tab2, "CCD Control") 
+        tab_widget.addTab(tab3, "File Saving")
+        tab_widget.addTab(tab4, "Shift Calculator")
         
-        #self.statusBar.setObjectName("statusBar")  ### Uhhh
         
         
         self.update_timer = QtCore.QTimer(self)
         self.update_timer.start()
         self.update_timer.setInterval(1000) # milliseconds
         self.update_timer.setSingleShot(False)
-        #self.update_timer.timeout.connect(lambda: self.statusBar().showMessage("Timer Refresh",1000))
         self.update_timer.timeout.connect(lambda: self.camTempLabel.setText(str(cam.get_attribute_value('Sensor Temperature Reading')) + " C"))
-        #self.update_timer.timeout.connect(self.update_label)
-                
         
-        ### create label for current mono wavelength
-        self.currentMonoWavelengthLabel = QWidgets.QLabel(self)
-        self.currentMonoWavelengthLabel.setAlignment(QtCore.Qt.AlignRight)
-        #self.currentMonoWavelengthLabel.setText(Mono1.current_wavelength + " nm")
-
+        
+        
         ### create input field for current laser wavelength for Raman peak calculations
         self.currentLaserWavelengthInput = QWidgets.QLineEdit(self)
-        self.currentLaserWavelengthInput.setMaxLength(5)
-        self.currentLaserWavelengthInput.setInputMask("999.9")
+        self.currentLaserWavelengthInput.setMaxLength(3)
+        self.currentLaserWavelengthInput.setInputMask("999")
         self.currentLaserWavelengthInput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
         #self.currentLaserWavelengthInput.setText(Mono1.current_laser_wavelength + " nm")
+
+        ### create header for calibration
+        self.calHeader = QWidgets.QLabel(self)
+        self.calHeader.setText("Calibrate Monochromator Position")
+        self.calHeader.setStyleSheet("font-weight: bold")
 
         ### create input field for counter
         self.currentCounterInput = QWidgets.QLineEdit(self)
         #calWL = round((2/3)*float(self.currentCounterInput.text()),1)
         self.currentCounterInput.setMaxLength(6)
-        self.currentCounterInput.setInputMask("999.9")
+        self.currentCounterInput.setInputMask("9999.9")
         self.currentCounterInput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        #self.currentCounterInput.textChanged(lambda: self.currentMonoWavelengthLabel.setText("test"))#str((2/3)*float(currentCounterInput.text()))))
-        #self.currentCounterInput.textChanged(lambda: Mono1.config.set('Mono_settings', 'current_wavelength', str((2/3)*float(currentCounterInput.text()))))
         
-        
-        
-        
-        ### create button to calibrate
+        ### create button to calibrate mono
         self.calButton = QWidgets.QPushButton(self)
         self.calButton.setObjectName("calButton")
         self.calButton.clicked.connect(lambda: self.calibrate()) #ADD ERROR HANDLING FOR NULL INPUT
         self.calButton.clicked.connect(lambda: self.currentMonoWavelengthLabel.setText(str(round((2/3)*float(self.currentCounterInput.text()),1))))
         self.calButton.clicked.connect(lambda: self.currentCounterInput.clear())
+        self.calButton.setText("Calibrate monochromator position")
 
-
-
+        ### create header for moving mono
+        self.moveHeader = QWidgets.QLabel(self)
+        self.moveHeader.setText("Move Monochromator Position")
+        self.moveHeader.setStyleSheet("font-weight: bold")
+        
+        ### create label for current mono wavelength
+        self.currentMonoWavelengthLabel = QWidgets.QLabel(self)
+        self.currentMonoWavelengthLabel.setAlignment(QtCore.Qt.AlignRight)
+        #self.currentMonoWavelengthLabel.setText(Mono1.current_wavelength + " nm")
 
         ### create input field for wavelength to approach
         self.approachWavelengthInput = QWidgets.QLineEdit(self)
@@ -461,6 +458,12 @@ class MainWindow(QWidgets.QMainWindow):
         self.homeButton.setText("HOME Monochromator")
 
 
+
+        ### create header for CCD settings
+        self.ccdHeader = QWidgets.QLabel(self)
+        self.ccdHeader.setText("CCD Settings")
+        self.ccdHeader.setStyleSheet("font-weight: bold")
+
         ### create label for current camera temp
         self.camTempLabel = QWidgets.QLabel(self)
         self.camTempLabel.setAlignment(QtCore.Qt.AlignRight)
@@ -468,8 +471,8 @@ class MainWindow(QWidgets.QMainWindow):
 
         ### create exposure time input
         self.exposureTimeInput = QWidgets.QLineEdit(self)
-        self.exposureTimeInput.setMaxLength(5)
-        self.exposureTimeInput.setInputMask("999.9")
+        self.exposureTimeInput.setMaxLength(6)
+        self.exposureTimeInput.setInputMask("999.99")
         self.exposureTimeInput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
         self.exposureTimeInput.textChanged.emit(self.exposureTimeInput.text())
 
@@ -480,21 +483,33 @@ class MainWindow(QWidgets.QMainWindow):
         self.expButton.clicked.connect(lambda: self.statusBar().showMessage("Exposure time set to "+str(float(self.exposureTimeInput.text()))+" seconds.",2000))
         self.expButton.setText("Send exposure time (s)")
 
+        ### create header for snapshot
+        self.snapshotHeader = QWidgets.QLabel(self)
+        self.snapshotHeader.setText("Snapshot (does not save automatically)")
+        self.snapshotHeader.setStyleSheet("font-weight: bold")
+
+
         ### create picture button
         self.camButton = QWidgets.QPushButton(self)
         self.camButton.setObjectName("camButton")
-        self.camButton.clicked.connect(lambda: takeSnapShot(str(self.fname.text()), float(self.pos.text())))
+        self.camButton.clicked.connect(lambda: takeSnapShot(str(self.fname.text()), float(self.currentMonoWavelengthLabel.text())))
         self.camButton.clicked.connect(lambda: self.statusBar().showMessage("Picture taken",2000))
         self.camButton.setText("Take a picture")
 
+        ''' Deprecated
         ### create input for mono position
         self.pos = QWidgets.QLineEdit(self)
         self.pos.setMaxLength(5)
         self.pos.setInputMask("999.9")
         self.pos.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
         self.pos.textChanged.emit(self.pos.text())
-
-
+        '''
+        
+        ### create header for Raman
+        self.ramanHeader = QWidgets.QLabel(self)
+        self.ramanHeader.setText("Raman Spectrum (saves automatically)")
+        self.ramanHeader.setStyleSheet("font-weight: bold")
+        
         ### create start input
         self.startInput = QWidgets.QLineEdit(self)
         self.startInput.setMaxLength(5)
@@ -509,12 +524,6 @@ class MainWindow(QWidgets.QMainWindow):
         self.stopInput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
         self.stopInput.textChanged.emit(self.stopInput.text())
 
-        ### create file name input
-        self.fname = QWidgets.QLineEdit(self)
-        self.fname.setMaxLength(50)
-        self.fname.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.fname.textChanged.emit(self.fname.text())
-
         ### create take spectrum button
         self.ramanButton = QWidgets.QPushButton(self)
         self.ramanButton.setObjectName("ramanButton")
@@ -528,59 +537,88 @@ class MainWindow(QWidgets.QMainWindow):
         self.currentDir = QWidgets.QLabel(self)
         self.currentDir.setAlignment(QtCore.Qt.AlignRight)
         
-        ### create testpath input
-        #self.testpath = QWidgets.QLineEdit(self)
-        #self.testpath.setMaxLength(50)
-        #self.testpath.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        #self.testpath.textChanged.emit(self.testpath.text())
-        
         ### create directory button
         self.dirButton = QWidgets.QPushButton(self)
         self.dirButton.setObjectName("dirButton")
         self.dirButton.clicked.connect(lambda: self.currentDir.setText(askdirectory(title='Select folder')))
         self.dirButton.clicked.connect(lambda: self.pathUpdate())
         #self.dirButton.clicked.connect(lambda: self.currentDir.show())
-
         #self.dirButton.clicked.connect(lambda: print(path))
         self.dirButton.setText("...")
-        
-        
+     
         ### create file name input
         self.fname = QWidgets.QLineEdit(self)
         self.fname.setMaxLength(50)
         self.fname.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        self.fname.textChanged.emit(self.fname.text()) 
-      
-      
-      
+        self.fname.textChanged.emit(self.fname.text())
+
+        ### create save file button
+        self.saveButton = QWidgets.QPushButton(self)
+        self.saveButton.setObjectName("saveButton")
+        self.saveButton.clicked.connect(lambda: saveData(self.fname.text()))
+        self.saveButton.setText("Save most recent data")
+        
+     
+     
+        ### create excitation wavelength input
+        self.shiftExcitationInput = QWidgets.QLineEdit(self)
+        self.shiftExcitationInput.setMaxLength(3)
+        self.shiftExcitationInput.setInputMask("999")
+        self.shiftExcitationInput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+
+        ### create response wavelength input
+        self.shiftResponseInput = QWidgets.QLineEdit(self)
+        self.shiftResponseInput.setMaxLength(3)
+        self.shiftResponseInput.setInputMask("999")
+        self.shiftResponseInput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        
+        ### create shift wavenumber label
+        self.shiftWN = QWidgets.QLabel(self)
+        self.shiftWN.setText("0")
+        
+        ### create shift calculation button
+        self.shiftButton = QWidgets.QPushButton(self)
+        self.shiftButton.setObjectName("shiftButton")
+        self.shiftButton.clicked.connect(lambda: self.calculateShift())
+        self.shiftButton.setText("Calculate Raman Shift")
+        
+        
+        
         ### put widgets into the QFormLayout of tab1
         # # p1_vertical.addRow("Solvent:", self.combo)
+        p1_vertical.addRow("Current Laser Wavelength:", self.currentLaserWavelengthInput)
+        p1_vertical.addRow(self.calHeader)
         p1_vertical.addRow("Calibration, enter current counter setting", self.currentCounterInput)
         p1_vertical.addRow(self.calButton)
-        p1_vertical.addRow("Current Laser Wavelength:", self.currentLaserWavelengthInput)
+        p1_vertical.addRow(self.moveHeader)
         p1_vertical.addRow("Current Mono Wavelength:", self.currentMonoWavelengthLabel)
         p1_vertical.addRow("Approach Mono Wavelength:", self.approachWavelengthInput)
         p1_vertical.addRow(self.progressBar, self.approachButton)
         p1_vertical.addRow("Home counter location: 660.1", self.homeButton)
 
         ### put widgets into the QFormLayout of tab2
+        p2_vertical.addRow(self.ccdHeader)
         p2_vertical.addRow("Current temp", self.camTempLabel)
         p2_vertical.addRow("Exposure time (s)", self.exposureTimeInput)
         p2_vertical.addRow(self.expButton)
-        p2_vertical.addRow("File name", self.fname)
-        p2_vertical.addRow("Mono position", self.pos)
+        p2_vertical.addRow(self.snapshotHeader)
         p2_vertical.addRow("Take and save current frame", self.camButton)
+        p2_vertical.addRow(self.ramanHeader)
+        p2_vertical.addRow("Scan Start (1/cm)", self.startInput)
+        p2_vertical.addRow("Scan Stop (1/cm)", self.stopInput)
+        p2_vertical.addRow(self.ramanButton)
 
-        ### put widgets into the QFormLayout of tab3 
-        #p3_vertical.addRow("file name", self.fname)
-        p3_vertical.addRow("Scan Start (1/cm)", self.startInput)
-        p3_vertical.addRow("Scan Stop (1/cm)", self.stopInput)
-        p3_vertical.addRow(self.ramanButton)
-
+        ### put widgets into the QFormLayout of tab3
+        p3_vertical.addRow("Active folder:", self.currentDir)
+        p3_vertical.addRow("Select new folder:", self.dirButton)
+        p3_vertical.addRow("File name", self.fname)
+        p3_vertical.addRow(self.saveButton)
+        
         ### put widgets into the QFormLayout of tab4
-        p4_vertical.addRow("Active folder:", self.currentDir)
-        p4_vertical.addRow("Select new folder:", self.dirButton)
-        p4_vertical.addRow("File name", self.fname)
+        p4_vertical.addRow("Excitation Wavelength (nm):", self.shiftExcitationInput)
+        p4_vertical.addRow("Response Wavelength (nm):", self.shiftResponseInput)
+        p4_vertical.addRow(self.shiftButton)
+        p4_vertical.addRow("Raman Shift (1/cm):", self.shiftWN)
 
         ### set window title and add tab widget to main window
         self.setWindowTitle("Raman control")
@@ -626,8 +664,9 @@ def main():
     app.processEvents()
     global Window
     Window = MainWindow()
-    Window.resize(600,400)
+    Window.resize(400,400)
     Window.show()
+    Window.initialize()
     app.setWindowIcon(QtGui.QIcon('icon.png'))
     splash.finish(Window)
     sys.exit(app.exec_())
