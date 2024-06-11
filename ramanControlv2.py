@@ -1,24 +1,20 @@
 '''
 To Do: 
 
-!!!!!!monochromator is incorrect lmao how did you even do that
+!!!!!!monochromator is incorrect lmao how did you even do that (?)
 -add actual raman mode lol
 -add video mode
--add spectrum time calc
+-add spectrum time calc (maybe just a rough: number of chunks * (10s + exposure time))
 -error handling for wrong inputs
 -fix ROI bug to remove stupid for loops
 -make it so files don't overwrite, rather append _2, _3, ...
--add 2D camera mode
 -Add fine calibration mode (popup: warning only perform with laser attenuated by ND wheel)
--Add sections ideally
-
+      (Maybe this isn't important because it can be done just once and hardcoded?)
 
 
 
 Known Issues:
 
--mono control freq loses communication. needs current pos in file to match current position 
--usually fails if commercial softaware is used
 
 
 Questions and Notes and Such:
@@ -49,16 +45,11 @@ import numpy as np
 import ctypes
 myappid = 'reznik.ramanControl.steve.01' # arbitrary string
 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-
-# global Mono1
-# Mono1 = Monochromator()
-# Mono1.sendcommand(' ')  
-
 plt.ion()
 
+''' Deprecated
 # first, do some house keeping
 # prompt the user for parent directory, then make folder with todays date
-''' Deprecated
 try: 
     parentDir = askdirectory(title='Select project folder') # shows dialog box and return the path
     dataDir = str(date.today())
@@ -102,9 +93,9 @@ def takeSnapShot(fname, pos):
     data = []
     px1 = 799 # center wavelength position
     px2 = 426 # high edge (7nm below)
-    deltaL = 22
+    deltaL = 22 # What is this??
     pixel = range(0,1340)
-    for i in range(400,1340): #SHOULD BE (0,1340)?
+    for i in range(0,1340): #Changed from (400,1340)
         wav = pos+ ((deltaL/(px2-px1))*(pixel[i]-px1))
         waveNum = 1/laser - 1/(wav*10**(-7))
         signal = sum(img[:, i])
@@ -113,9 +104,46 @@ def takeSnapShot(fname, pos):
         data.append(signal)
     return signal
 
+def takeSnapShot2D(fname, pos):
+    # pos is spectrometer position
+    img = cam.snap()
+    plt.imshow(img,aspect='auto')
+    
+    global signal
+    signal = []
+    
+    global data
+    ## this may or may not be the most sensible way to package the data into a 1D array
+    ## in MATLAB, this requires a reshape and a rotate to display the proper orientation
+    img1D = img.reshape(-1)
+    data = img1D.tolist()
+
+    pixel = range(len(img[0]))
+    for i in range(len(img[0])):
+        signal.append(sum(img[:, i]))
+
+    global wavelen
+    global wavNum
+    wavelen =[]
+    wavNum = []
+    px1 = 799 # center wavelength position
+    px2 = 426 # high edge (7nm below)
+    deltaL = 22 # What is this??
+    pixel = range(0,1340)
+    for i in range(0,1340): #Changed from (400,1340)
+        wav = pos+ ((deltaL/(px2-px1))*(pixel[i]-px1))
+        waveNum = 1/laser - 1/(wav*10**(-7))
+        signal = sum(img[:, i])
+        wavelen.append(wav)
+        wavNum.append(waveNum)
+    wavelen = wavelen * 100
+    wavNum = wavNum * 100
+    return signal
+
 def takeSpectrum(start, stop, fname): 
     #HARD CODED CONVERSION FOR NOW
     #FIX THIS DUMBASS
+    #OUCH
     '''
         start and stop input in nm bc my brain is tired and i keep fucking up the conversion. 
         output saves both nm and cm^-1 so its fine
@@ -174,9 +202,6 @@ def saveData(fname):
     file.close()
     fpath_txt=os.path.join(path,fname+'.txt')
     os.rename(fpath,fpath_txt)
-    
-
-    
 
 class Monochromator(object):
     ### Initialises a serial port
@@ -273,7 +298,6 @@ class Monochromator(object):
         ### begin homing procedure
 
         self.sendcommand("A8")
-        #self.checkHOMEstatus()
         if(self.checkHOMEstatus() == "32"):
             self.sendcommand("M+23000")
             while(self.checkHOMEstatus() != "2"):
@@ -322,11 +346,10 @@ class Monochromator(object):
             nm_difference = float(approach_wavelength) - float(self.current_wavelength)
             print("Difference in nm: " + str(nm_difference))
             step_difference = round(((float(nm_difference) / float(self.nm_per_revolution)) * float(self.steps_per_revolution))+ float(self.offset))
-            print("Difference in steps: " + str(step_difference))  
+            print("Difference in steps: " + str(step_difference))
             time_needed_sec = abs(step_difference / int(self.speed)) + abs(int(self.offset)/int(self.approach_speed))
             print("Time needed for operation: " + str(time_needed_sec) + " s")
-            Window.statusBar().showMessage("Moving monochromator . . .  (est. "+str(time_needed_sec)+" seconds)",2000)
-            #Window.timeNeeded = time_needed_sec
+            Window.statusBar().showMessage("Moving monochromator . . .  (est. "+str(time_needed_sec)+" seconds)",3000)
             time_delay_for_progressbar = time_needed_sec / 100
             self.sendcommand("V" + str(self.speed))
             self.sendcommand(str(format(step_difference, '+')))
@@ -362,9 +385,7 @@ class Monochromator(object):
         self.mono.flushInput()
         self.mono.flushOutput()
         self.mono.close()
-   
- 
-        
+
 class MainWindow(QWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
@@ -384,7 +405,6 @@ class MainWindow(QWidgets.QMainWindow):
         tab_widget.addTab(tab4, "Shift Calculator")
         
         
-        
         self.update_timer = QtCore.QTimer(self)
         self.update_timer.start()
         self.update_timer.setInterval(1000) # milliseconds
@@ -392,13 +412,11 @@ class MainWindow(QWidgets.QMainWindow):
         self.update_timer.timeout.connect(lambda: self.camTempLabel.setText(str(cam.get_attribute_value('Sensor Temperature Reading')) + " C"))
         
         
-        
         ### create input field for current laser wavelength for Raman peak calculations
         self.currentLaserWavelengthInput = QWidgets.QLineEdit(self)
         self.currentLaserWavelengthInput.setMaxLength(3)
         self.currentLaserWavelengthInput.setInputMask("999")
         self.currentLaserWavelengthInput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        #self.currentLaserWavelengthInput.setText(Mono1.current_laser_wavelength + " nm")
 
         ### create header for calibration
         self.calHeader = QWidgets.QLabel(self)
@@ -407,7 +425,6 @@ class MainWindow(QWidgets.QMainWindow):
 
         ### create input field for counter
         self.currentCounterInput = QWidgets.QLineEdit(self)
-        #calWL = round((2/3)*float(self.currentCounterInput.text()),1)
         self.currentCounterInput.setMaxLength(6)
         self.currentCounterInput.setInputMask("9999.9")
         self.currentCounterInput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
@@ -415,34 +432,31 @@ class MainWindow(QWidgets.QMainWindow):
         ### create button to calibrate mono
         self.calButton = QWidgets.QPushButton(self)
         self.calButton.setObjectName("calButton")
-        self.calButton.clicked.connect(lambda: self.calibrate()) #ADD ERROR HANDLING FOR NULL INPUT
-        self.calButton.clicked.connect(lambda: self.currentMonoWavelengthLabel.setText(str(round((2/3)*float(self.currentCounterInput.text()),1))))
-        self.calButton.clicked.connect(lambda: self.currentCounterInput.clear())
+        self.calButton.clicked.connect(lambda: self.calibrate())
         self.calButton.setText("Calibrate monochromator position")
+
+        ### create label for current mono wavelength
+        self.currentMonoWavelengthLabel = QWidgets.QLabel(self)
+        self.currentMonoWavelengthLabel.setAlignment(QtCore.Qt.AlignRight)
+        #self.currentMonoWavelengthLabel.setText(Mono1.current_wavelength + " nm")
 
         ### create header for moving mono
         self.moveHeader = QWidgets.QLabel(self)
         self.moveHeader.setText("Move Monochromator Position")
         self.moveHeader.setStyleSheet("font-weight: bold")
-        
-        ### create label for current mono wavelength
-        self.currentMonoWavelengthLabel = QWidgets.QLabel(self)
-        self.currentMonoWavelengthLabel.setAlignment(QtCore.Qt.AlignRight)
-        #self.currentMonoWavelengthLabel.setText(Mono1.current_wavelength + " nm")
 
         ### create input field for wavelength to approach
         self.approachWavelengthInput = QWidgets.QLineEdit(self)
         self.approachWavelengthInput.setMaxLength(5)
         self.approachWavelengthInput.setInputMask("999.9")
         self.approachWavelengthInput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-        #self.approachWavelengthInput.textChanged.connect(self.check_state)
         self.approachWavelengthInput.textChanged.emit(self.approachWavelengthInput.text())
 
         ### create button to start the mono movement
         self.approachButton = QWidgets.QPushButton(self)
         self.approachButton.setObjectName("approachButton")
         self.approachButton.clicked.connect(lambda: Mono1.approachWL(float(self.approachWavelengthInput.text())))
-        #self.approachButton.clicked.connect(lambda: self.statusBar().showMessage("Moving monochromator . . .  (est. "+str(self.timeNeeded)+" seconds)",2000))
+        #self.approachButton.clicked.connect(lambda: self.statusBar().showMessage("Moving monochromator . . .  (est. "+str(Mono1.time_needed_sec)+" seconds)",1000*Mono1.time_needed_sec))
         self.approachButton.setText("Approach")
 
 		### create progress bar for mono movement progress indication
@@ -454,9 +468,8 @@ class MainWindow(QWidgets.QMainWindow):
         self.homeButton = QWidgets.QPushButton(self)
         self.homeButton.setObjectName("homeButton")
         self.homeButton.clicked.connect(lambda: Mono1.getHomePosition())
-        self.homeButton.clicked.connect(lambda: self.statusBar().showMessage("Homing monochromator . . .  (est. TIME minutes)",2000))
+        self.homeButton.clicked.connect(lambda: self.statusBar().showMessage("Homing monochromator . . . ",10000))
         self.homeButton.setText("HOME Monochromator")
-
 
 
         ### create header for CCD settings
@@ -480,7 +493,7 @@ class MainWindow(QWidgets.QMainWindow):
         self.expButton = QWidgets.QPushButton(self)
         self.expButton.setObjectName("expButton")
         self.expButton.clicked.connect(lambda: cam.set_attribute_value("Exposure Time", float(self.exposureTimeInput.text())))
-        self.expButton.clicked.connect(lambda: self.statusBar().showMessage("Exposure time set to "+str(float(self.exposureTimeInput.text()))+" seconds.",2000))
+        self.expButton.clicked.connect(lambda: self.statusBar().showMessage("Exposure time set to "+str(float(self.exposureTimeInput.text()))+" seconds.",3000))
         self.expButton.setText("Send exposure time (s)")
 
         ### create header for snapshot
@@ -493,8 +506,14 @@ class MainWindow(QWidgets.QMainWindow):
         self.camButton = QWidgets.QPushButton(self)
         self.camButton.setObjectName("camButton")
         self.camButton.clicked.connect(lambda: takeSnapShot(str(self.fname.text()), float(self.currentMonoWavelengthLabel.text())))
-        self.camButton.clicked.connect(lambda: self.statusBar().showMessage("Picture taken",2000))
+        self.camButton.clicked.connect(lambda: self.statusBar().showMessage("Picture taken",3000))
         self.camButton.setText("Take a picture")
+
+        ### create 2D button
+        self.camButton2D = QWidgets.QPushButton(self)
+        self.camButton2D.setObjectName("camButton2D")
+        self.camButton2D.clicked.connect(lambda: takeSnapShot2D(str(self.fname.text()), float(self.currentMonoWavelengthLabel.text())))
+        self.camButton2D.setText("Take 2D image")
 
         ''' Deprecated
         ### create input for mono position
@@ -531,8 +550,7 @@ class MainWindow(QWidgets.QMainWindow):
         self.ramanButton.clicked.connect(lambda: self.statusBar().showMessage("Pausing for 60 seconds before collection . . . ",60000))
         self.ramanButton.setText("Take Raman spectrum")
       
-      
-      
+        
         ### create label for current directory
         self.currentDir = QWidgets.QLabel(self)
         self.currentDir.setAlignment(QtCore.Qt.AlignRight)
@@ -559,7 +577,6 @@ class MainWindow(QWidgets.QMainWindow):
         self.saveButton.setText("Save most recent data")
         
      
-     
         ### create excitation wavelength input
         self.shiftExcitationInput = QWidgets.QLineEdit(self)
         self.shiftExcitationInput.setMaxLength(3)
@@ -583,15 +600,14 @@ class MainWindow(QWidgets.QMainWindow):
         self.shiftButton.setText("Calculate Raman Shift")
         
         
-        
         ### put widgets into the QFormLayout of tab1
         # # p1_vertical.addRow("Solvent:", self.combo)
-        p1_vertical.addRow("Current Laser Wavelength:", self.currentLaserWavelengthInput)
+        p1_vertical.addRow("Current Laser Wavelength (nm):", self.currentLaserWavelengthInput)
         p1_vertical.addRow(self.calHeader)
         p1_vertical.addRow("Calibration, enter current counter setting", self.currentCounterInput)
         p1_vertical.addRow(self.calButton)
-        p1_vertical.addRow(self.moveHeader)
         p1_vertical.addRow("Current Mono Wavelength:", self.currentMonoWavelengthLabel)
+        p1_vertical.addRow(self.moveHeader)
         p1_vertical.addRow("Approach Mono Wavelength:", self.approachWavelengthInput)
         p1_vertical.addRow(self.progressBar, self.approachButton)
         p1_vertical.addRow("Home counter location: 660.1", self.homeButton)
@@ -602,7 +618,8 @@ class MainWindow(QWidgets.QMainWindow):
         p2_vertical.addRow("Exposure time (s)", self.exposureTimeInput)
         p2_vertical.addRow(self.expButton)
         p2_vertical.addRow(self.snapshotHeader)
-        p2_vertical.addRow("Take and save current frame", self.camButton)
+        p2_vertical.addRow("Take 1D snapshot", self.camButton)
+        p2_vertical.addRow("Take 2D snapshot", self.camButton2D)
         p2_vertical.addRow(self.ramanHeader)
         p2_vertical.addRow("Scan Start (1/cm)", self.startInput)
         p2_vertical.addRow("Scan Stop (1/cm)", self.stopInput)
@@ -617,37 +634,51 @@ class MainWindow(QWidgets.QMainWindow):
         ### put widgets into the QFormLayout of tab4
         p4_vertical.addRow("Excitation Wavelength (nm):", self.shiftExcitationInput)
         p4_vertical.addRow("Response Wavelength (nm):", self.shiftResponseInput)
-        p4_vertical.addRow(self.shiftButton)
         p4_vertical.addRow("Raman Shift (1/cm):", self.shiftWN)
+        p4_vertical.addRow(self.shiftButton)
+
 
         ### set window title and add tab widget to main window
         self.setWindowTitle("Raman control")
         self.setCentralWidget(tab_widget)
-     
-
+        
     def calibrate(self):
-        self.config = configparser.RawConfigParser()
-        self.config.read('mono.cfg')
-        self.config.set('Mono_settings', 'current_wavelength', str(round((2/3)*float(self.currentCounterInput.text()),1)))
-        f = open('mono.cfg',"w")
-        self.config.write(f)
-        Mono1.current_wavelength = str(round((2/3)*float(self.currentCounterInput.text()),1))
-    
+        if self.currentCounterInput.text() == '.':
+            self.statusBar().showMessage("Error: no counter value input",3000)
+        else:
+            self.config = configparser.RawConfigParser()
+            self.config.read('mono.cfg')
+            self.config.set('Mono_settings', 'current_wavelength', str(round((2/3)*float(self.currentCounterInput.text()),1)))
+            f = open('mono.cfg',"w")
+            self.config.write(f)
+            self.currentMonoWavelengthLabel.setText(str(round((2/3)*float(self.currentCounterInput.text()),1)))
+            Mono1.current_wavelength = str(round((2/3)*float(self.currentCounterInput.text()),1))
+            self.currentCounterInput.clear()
+        
     def closeEvent(self,event):
         Mono1.disconnect()
         print("Terminated connection with monochromator.")
+        cam.close()
+        print("Disconnected from camera.")
         event.accept()
         sys.exit(0)
         
     def initialize(self):
         self.currentLaserWavelengthInput.setText("532")
+        self.exposureTimeInput.setText("0.1")
+        cam.set_attribute_value("Exposure Time", float(self.exposureTimeInput.text()))
         self.currentDir.setText('C:/')
         global path
         path = os.path.join(self.currentDir.text())
+        self.shiftResponseInput.setText("532")
         
     def pathUpdate(self):
         global path
         path = os.path.join(self.currentDir.text())
+        
+    def calculateShift(self):
+        wav=round(((1/float(self.shiftExcitationInput.text()) - 1/float(self.shiftResponseInput.text()))*float(1e+7)),2)
+        self.shiftWN.setText(str(wav))
 
     
 def main():        
@@ -659,8 +690,6 @@ def main():
     global Mono1
     Mono1 = Monochromator()
     Mono1.sendcommand(' ')  
-    #PrincetonInstruments.list_cameras()
-    #cam = PrincetonInstruments.PicamCamera()
     app.processEvents()
     global Window
     Window = MainWindow()
