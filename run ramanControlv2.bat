@@ -1,0 +1,1 @@
+start cmd /k "echo Running ramanControlv2.py ... & cd %~dp0 & python3 ramanControlv2.py"
