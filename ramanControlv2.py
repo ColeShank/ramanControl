@@ -1,20 +1,19 @@
 '''
-To Do: 
 
-!!!!!!monochromator is incorrect lmao how did you even do that (?)
--add actual raman mode lol
--add video mode
+To Do: 
+-fix wide spectrum raman
 -add spectrum time calc (maybe just a rough: number of chunks * (10s + exposure time))
+-live data collection
 -error handling for wrong inputs
--fix ROI bug to remove stupid for loops
 -make it so files don't overwrite, rather append _2, _3, ...
 -Add fine calibration mode (popup: warning only perform with laser attenuated by ND wheel)
       (Maybe this isn't important because it can be done just once and hardcoded?)
-
+-Verify all input masks etc so they handle the inputs desired
+-Always save most recent data taken in temp location (e.g. Documents)
 
 
 Known Issues:
-
+-Homing doesn't always work, idk why :(
 
 
 Questions and Notes and Such:
@@ -97,8 +96,10 @@ def takeSnapShot(fname, pos):
     data = []
     ### what is this sorcery?
     ''' I belive this is how it should work:
+
+
     pxc = 670 # center pixel (maybe should be ~670.5 but probably small enough error...)
-    deltaL = 22.244 # nm over the 1340 pixel wide detector, based on monochromator and detector specs
+    deltaL = 22.244 # nm range over the 1340 pixel wide detector, based on monochromator and detector specs
     pixel = range(0,1340)
     for i in range(0,1340):
         wav = pos + (deltaL/1340)*(pixel[i]-pxc)
@@ -277,7 +278,7 @@ class Monochromator(object):
             print("Mono is not moving \r")
             return False
         else:
-            print("Mono is moving \r")  #AWFUL SPAMMY
+            print("Mono is moving \r")  #AWFUL SPAMMY, NOT A FAN
             return True
 			
     def checkfortimeout(self):
@@ -605,7 +606,7 @@ class MainWindow(QWidgets.QMainWindow):
         
         ### create header for wavenumber shift
         self.shiftWNHeader = QWidgets.QLabel(self)
-        self.shiftWNHeader.setText("Enter Wavelengths")
+        self.shiftWNHeader.setText("Enter Wavelength")
         self.shiftWNHeader.setStyleSheet("font-weight: bold")
         
         ### create response wavelength input
@@ -723,24 +724,32 @@ class MainWindow(QWidgets.QMainWindow):
         self.currentDir.setText('C:/')
         global path
         path = os.path.join(self.currentDir.text())
-        self.shiftResponseInput.setText("532")
+        self.shiftExcitationInput.setText("532")
         
     def pathUpdate(self):
         global path
         path = os.path.join(self.currentDir.text())
         
     def calculateShift(self):
-        ''' TO DO:
-        - Calculate for whichever section is filled out
-        - Maybe an if statement
-        - Maybe just do both any time but IDK some null input handling ideally?
-        '''
-    
-    
-    
-    
-        wav=round(((1/float(self.shiftExcitationInput.text()) - 1/float(self.shiftResponseInput.text()))*float(1e+7)),2)
-        self.shiftWN.setText(str(wav))
+
+        if self.shiftResponseInput.text()+self.shiftInputWN.text() == '':
+            self.statusBar().showMessage("Error: must enter at least one input",2000)
+            
+        elif self.shiftResponseInput.text() == '':
+            nm = round(1/(1/float(self.shiftExcitationInput.text()) - float(self.shiftInputWN.text())/float(1e+7)),2)
+            self.absoluteShift.setText(str(nm))
+            self.relativeShift.setText(str(round(nm - float(self.shiftExcitationInput.text()),2)))
+            
+        elif self.shiftInputWN.text() == '':
+            wav=round(((1/float(self.shiftExcitationInput.text()) - 1/float(self.shiftResponseInput.text()))*float(1e+7)),2)
+            self.shiftWN.setText(str(wav))
+            
+        else:       
+            wav=round(((1/float(self.shiftExcitationInput.text()) - 1/float(self.shiftResponseInput.text()))*float(1e+7)),2)
+            self.shiftWN.setText(str(wav))
+            nm = round(1/(1/float(self.shiftExcitationInput.text()) - float(self.shiftInputWN.text())/float(1e+7)),2)
+            self.absoluteShift.setText(str(nm))
+            self.relativeShift.setText(str(round(nm - float(self.shiftExcitationInput.text()),2)))
 
     
 def main():        
