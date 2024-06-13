@@ -58,21 +58,21 @@ except FileExistsError:
 '''
 
 #laser = 532# hard coded bullshit, fix
-laser = float(Window.currentLaserWavelengthInput.text())
+laser = float(Window.currentLaserWavelengthInput.text()) #will this throw startup errors? I hope not :(
 
 '''
 These conversion functions show up like 3-4 times in different ways...
 Condense to use common variables (from GUI) and remove redundancy
 '''
 
-def wavNumToNM(wav):
-    # converts shift "wav" [1/cm] to nm
-    nm = 1/(1/float(laser) - float(wav)/float(1e+7))
+def wavToNM(wavn):
+    # converts shift "wavn" [1/cm] to nm
+    nm = 1/(1/float(laser) - float(wavn)/float(1e+7))
     return nm
 
-def nmToWav(laserWL, monoWL):
+def nmToWav(wavl):
     # calculates shift "wav" [1/cm] 
-    wav=(1/float(laserWL) - 1/float(monoWL))*float(1e+7)
+    wav = (1/float(laser) - 1/float(wavl))*float(1e+7)
     return wav
 
 def takeSnapShot(fname, pos):
@@ -89,9 +89,6 @@ def takeSnapShot(fname, pos):
 
     plt.plot(pixel, signal)
     plt.show()
-    '''
-    -Better consistency in naming conventions for these very similar things
-    '''
     global data
     global wavelen
     global wavenum
@@ -176,8 +173,8 @@ def takeSpectrum(start, stop, fname):
     file.write('Wavelength(nm), Raman shift(cm^-1), Intensity(arb) \n')
     # assumes start and stop input in cm^-1 shift, since thats how we normally talk about it
     # start by converting start and stop to nm
-    # nmStart = wavNumToNM(float(start))
-    # nmStop = wavNumToNM(float(stop))
+    # nmStart = wavToNM(float(start))
+    # nmStop = wavToNM(float(stop))
 
     #now we move the spec to the start 
     #note - this will overshoot! personally, i don't care
@@ -397,13 +394,13 @@ class Monochromator(object):
             print("Input is not numeric")
             MessageBox = QtGui.QMessageBox.warning(Window,"Error:","Input is not numeric") 
             Window.approachButton.setEnabled(True)
-    
+    ''' Deprecated
     ### Does this go here???? Unclear why it is here, maybe can be replaced/deleted/combined with the other function which does the same thing
     def getWavenumber(laserWL, monoWL):
         if(monoWL != "."):
             wavenumber = abs((1/float(laserWL)) - (1/float(monoWL)))*float(1e+7)
         return int(round(wavenumber,0))
-        
+    '''    
     def disconnect(self):
         self.mono.flushInput()
         self.mono.flushOutput()
