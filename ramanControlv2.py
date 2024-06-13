@@ -25,16 +25,14 @@ Questions and Notes and Such:
 
 # imports
 import sys
-sys.path.append('C:/Users/nickp/anaconda3/')
+#sys.path.append('C:/Users/nickp/anaconda3/') #maybe unnecessary?
 import os
 from datetime import date
 import logging, configparser, time, serial
 import datetime as dt
 from PyQt5 import QtGui, QtCore, QtWidgets
 import PyQt5.QtWidgets as QWidgets
-#from tkinter import Tk
 from tkinter.filedialog import askdirectory
-# from picam import *
 import pylablib as pll
 pll.par["devices/dlls/picam"] = "path/to/dlls"
 from pylablib.devices import PrincetonInstruments
@@ -59,7 +57,13 @@ except FileExistsError:
     print('Using folder from earlier today')
 '''
 
-laser = 532# hard coded bullshit, fix
+#laser = 532# hard coded bullshit, fix
+laser = float(Window.currentLaserWavelengthInput.text())
+
+'''
+These conversion functions show up like 3-4 times in different ways...
+Condense to use common variables (from GUI) and remove redundancy
+'''
 
 def wavNumToNM(wav):
     # converts shift "wav" [1/cm] to nm
@@ -79,28 +83,47 @@ def takeSnapShot(fname, pos):
     signal = []
     pixel = range(len(img[0]))
     # it would be so much better to use the ROI binning. something weird need to fix
+    # are the next two lines redundant with the for loop later?
     for i in range(len(img[0])):
         signal.append(sum(img[:, i]))
 
     plt.plot(pixel, signal)
     plt.show()
-    
+    '''
+    -Better consistency in naming conventions for these very similar things
+    '''
     global data
     global wavelen
-    global wavNum
+    global wavenum
     wavelen =[]
-    wavNum = []
+    wavenum = []
     data = []
-    px1 = 799 # center wavelength position
+    ### what is this sorcery?
+    ''' I belive this is how it should work:
+    pxc = 670 # center pixel (maybe should be ~670.5 but probably small enough error...)
+    deltaL = 22.244 # nm over the 1340 pixel wide detector, based on monochromator and detector specs
+    pixel = range(0,1340)
+    for i in range(0,1340):
+        wav = pos + (deltaL/1340)*(pixel[i]-pxc)
+        wavNum = 1/laser - 1/(wav*10**(-7))
+        signal = sum(img[:, i])
+        wavelen.append(wav)
+        wavenum.append(wavNum)
+        data.append(signal)
+    return signal
+    
+    
+    '''
+    px1 = 799 # center wavelength position  
     px2 = 426 # high edge (7nm below)
-    deltaL = 22 # What is this??
+    deltaL = 22 # Fine calibration would alter this value... has it been verified?
     pixel = range(0,1340)
     for i in range(0,1340): #Changed from (400,1340)
         wav = pos+ ((deltaL/(px2-px1))*(pixel[i]-px1))
-        waveNum = 1/laser - 1/(wav*10**(-7))
+        wavNum = 1/laser - 1/(wav*10**(-7))
         signal = sum(img[:, i])
         wavelen.append(wav)
-        wavNum.append(waveNum)
+        wavenum.append(wavNum)
         data.append(signal)
     return signal
 
@@ -123,21 +146,21 @@ def takeSnapShot2D(fname, pos):
         signal.append(sum(img[:, i]))
 
     global wavelen
-    global wavNum
+    global wavenum
     wavelen =[]
-    wavNum = []
+    wavenum = []
     px1 = 799 # center wavelength position
     px2 = 426 # high edge (7nm below)
     deltaL = 22 # What is this??
     pixel = range(0,1340)
     for i in range(0,1340): #Changed from (400,1340)
         wav = pos+ ((deltaL/(px2-px1))*(pixel[i]-px1))
-        waveNum = 1/laser - 1/(wav*10**(-7))
+        wavNum = 1/laser - 1/(wav*10**(-7))
         signal = sum(img[:, i])
         wavelen.append(wav)
-        wavNum.append(waveNum)
+        wavenum.append(wavNum)
     wavelen = wavelen * 100
-    wavNum = wavNum * 100
+    wavenum = wavenum * 100
     return signal
 
 def takeSpectrum(start, stop, fname): 
@@ -161,7 +184,7 @@ def takeSpectrum(start, stop, fname):
     #i'd rather take more data & am writing this so it just takes a fuckload of data
     #can be rewritten in future
     wavelen =[]
-    wavNum = []
+    wavenum = []
     data = []
     #sleep for 1 minute to give time to leave the room
     time.sleep(60)
@@ -176,19 +199,19 @@ def takeSpectrum(start, stop, fname):
         px2 = 426 # high edge (7nm below)
         deltaL = 22
         pixel = range(0,1340)
-        for i in range(400,1340):
-            wav = pos+ ((deltaL/(px2-px1))*(pixel[i]-px1))
-            waveNum = 1/laser - 1/(wav*10**(-7))
+        for i in range(0,1340):
+            wav = pos + ((deltaL/(px2-px1))*(pixel[i]-px1))
+            wavNum = 1/laser - 1/(wav*10**(-7))
             signal = sum(img[:, i])
             wavelen.append(wav)
-            wavNum.append(waveNum)
+            wavenum.append(wavNum)
             data.append(signal)
-            stringToWrite = str(wav)+','+str(waveNum)+','+str(signal)+'\n' 
+            stringToWrite = str(wav)+','+str(wavNum)+','+str(signal)+'\n' 
             file.write(stringToWrite)
     file.close()
     fpath_txt=os.path.join(path,fname+'.txt')
     os.rename(fpath,fpath_txt)
-    plt.plot(wavNum, data)
+    plt.plot(wavenum, data)
     plt.show()
     return signal
 
@@ -197,7 +220,7 @@ def saveData(fname):
     file = open(fpath,'w')
     file.write('Wavelength(nm), Raman shift(cm^-1), Intensity(arb) \n')
     for line in np.arange(len(data)):
-        stringToWrite = str(wavelen[line])+','+str(wavNum[line])+','+str(data[line])+'\n' 
+        stringToWrite = str(wavelen[line])+','+str(wavenum[line])+','+str(data[line])+'\n' 
         file.write(stringToWrite)    
     file.close()
     fpath_txt=os.path.join(path,fname+'.txt')
@@ -582,7 +605,12 @@ class MainWindow(QWidgets.QMainWindow):
         self.shiftExcitationInput.setMaxLength(3)
         self.shiftExcitationInput.setInputMask("999")
         self.shiftExcitationInput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
-
+        
+        ### create header for wavenumber shift
+        self.shiftWNHeader = QWidgets.QLabel(self)
+        self.shiftWNHeader.setText("Enter Wavelengths")
+        self.shiftWNHeader.setStyleSheet("font-weight: bold")
+        
         ### create response wavelength input
         self.shiftResponseInput = QWidgets.QLineEdit(self)
         self.shiftResponseInput.setMaxLength(3)
@@ -591,13 +619,35 @@ class MainWindow(QWidgets.QMainWindow):
         
         ### create shift wavenumber label
         self.shiftWN = QWidgets.QLabel(self)
-        self.shiftWN.setText("0")
+        self.shiftWN.setText("0")     
+
+        ### create header for wavelength shift
+        self.shiftNMHeader = QWidgets.QLabel(self)
+        self.shiftNMHeader.setText("Or, Enter Shift")
+        self.shiftNMHeader.setStyleSheet("font-weight: bold")
+        
+        ### create shift input
+        self.shiftInputWN = QWidgets.QLineEdit(self)
+        self.shiftInputWN.setObjectName("shiftInputWN")
+        self.shiftInputWN.setMaxLength(4)
+        self.shiftInputWN.setInputMask("9999")
+        self.shiftInputWN.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        
+        ### create absolute nm label
+        self.absoluteShift = QWidgets.QLabel(self)
+        self.absoluteShift.setObjectName("absoluteShift")
+        
+        ### create relative nm label
+        self.relativeShift = QWidgets.QLabel(self)
+        self.relativeShift.setObjectName("relativeShift")
         
         ### create shift calculation button
         self.shiftButton = QWidgets.QPushButton(self)
         self.shiftButton.setObjectName("shiftButton")
         self.shiftButton.clicked.connect(lambda: self.calculateShift())
-        self.shiftButton.setText("Calculate Raman Shift")
+        self.shiftButton.setText("Calculate Shift")           
+        
+        
         
         
         ### put widgets into the QFormLayout of tab1
@@ -633,9 +683,15 @@ class MainWindow(QWidgets.QMainWindow):
         
         ### put widgets into the QFormLayout of tab4
         p4_vertical.addRow("Excitation Wavelength (nm):", self.shiftExcitationInput)
+        p4_vertical.addRow(self.shiftWNHeader)
         p4_vertical.addRow("Response Wavelength (nm):", self.shiftResponseInput)
         p4_vertical.addRow("Raman Shift (1/cm):", self.shiftWN)
+        p4_vertical.addRow(self.shiftNMHeader)
+        p4_vertical.addRow("Raman shift (1/cm):", self.shiftInputWN)
+        p4_vertical.addRow("Absolute wavelength (nm):", self.absoluteShift)
+        p4_vertical.addRow("Relative wavelength (nm):", self.relativeShift)
         p4_vertical.addRow(self.shiftButton)
+        
 
 
         ### set window title and add tab widget to main window
@@ -677,6 +733,15 @@ class MainWindow(QWidgets.QMainWindow):
         path = os.path.join(self.currentDir.text())
         
     def calculateShift(self):
+        ''' TO DO:
+        - Calculate for whichever section is filled out
+        - Maybe an if statement
+        - Maybe just do both any time but IDK some null input handling ideally?
+        '''
+    
+    
+    
+    
         wav=round(((1/float(self.shiftExcitationInput.text()) - 1/float(self.shiftResponseInput.text()))*float(1e+7)),2)
         self.shiftWN.setText(str(wav))
 
