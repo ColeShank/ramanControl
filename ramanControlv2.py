@@ -6,7 +6,6 @@ To Do:
 -error handling for wrong inputs
 -make it so files don't overwrite, rather append _2, _3, ...
     - currently crashes if file already exists
--Always save most recent data taken in temp location (e.g. Documents)
 -Clean up when core functions are solid
 
 
@@ -58,7 +57,6 @@ def takeSnapShot(fname, pos):
     global signal
     signal = []
     pixel = range(len(img[0]))
-    # it would be so much better to use the ROI binning. something weird need to fix
     # are the next two lines redundant with the for loop later?
     for i in range(len(img[0])):
         signal.append(sum(img[:, i]))
@@ -80,10 +78,10 @@ def takeSnapShot(fname, pos):
         wavelen.append(wav)
         wavenum.append(wavNum)
         data.append(signal)
-
-    plt.plot(wavelen, data)
-    plt.show()
         
+    plt.plot(wavenum, data)
+    plt.show()
+    autoSave()    
     return signal
 
 
@@ -121,6 +119,7 @@ def takeSnapShot2D(fname, pos):
         wavenum.append(wavNum)
     wavelen = wavelen * 100
     wavenum = wavenum * 100
+    autoSave()
     return signal
 
 def takeSpectrum(start, stop, fname):
@@ -178,9 +177,23 @@ def takeSpectrum(start, stop, fname):
     file.close()
     fpath_txt = os.path.join(path,fname+'.txt')
     os.rename(fpath,fpath_txt)
+    autoSave()
     print('Spectrum complete.')
     plt.plot(wavenum, data)
     plt.show()
+
+def autoSave():
+    now = dt.datetime.now()
+    now_str = now.strftime('%y%m%d%H%M%S')
+    tempname = 'Raman_'+now_str
+    autopath = os.path.join('C:/Users/nickp/Documents/Raman data files',str(tempname))
+    file = open(autopath,'w')
+    for line in np.arange(len(data)):
+        stringToWrite = str(wavelen[line])+','+str(wavenum[line])+','+str(data[line])+'\n' 
+        file.write(stringToWrite)    
+    file.close()
+    autopath_txt = os.path.join(autopath+'.txt')
+    os.rename(autopath,autopath_txt)
 
 def saveData(fname):
     fpath = os.path.join(path,fname)
@@ -394,7 +407,7 @@ class MainWindow(QWidgets.QMainWindow):
         tab_widget.addTab(tab3, "File Saving")
         tab_widget.addTab(tab4, "Shift Calculator")
         
-        
+        ## update loop for CCD temperature
         self.update_timer = QtCore.QTimer(self)
         self.update_timer.start()
         self.update_timer.setInterval(1000) # milliseconds
@@ -416,7 +429,7 @@ class MainWindow(QWidgets.QMainWindow):
         ## create input field for counter
         self.currentCounterInput = QWidgets.QLineEdit(self)
         self.currentCounterInput.setMaxLength(7)
-        self.currentCounterInput.setInputMask("99999.0")
+        self.currentCounterInput.setInputMask("99999.9")
         self.currentCounterInput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
         
         ## create button to calibrate mono
@@ -475,7 +488,6 @@ class MainWindow(QWidgets.QMainWindow):
         self.ccdCalButton.setObjectName("ccdCalButton")
         self.ccdCalButton.clicked.connect(lambda: self.calibrateCCD())
         self.ccdCalButton.setText("Calibrate")
-        
 
         ## create exposure time input
         self.exposureTimeInput = QWidgets.QLineEdit(self)
@@ -715,8 +727,21 @@ class MainWindow(QWidgets.QMainWindow):
         self.currentMonoWavelengthLabel.setText('532.0')
         Mono1.current_wavelength = "532"
 
+        
+        ## take and save image to verify calibration
         takeSnapShot('cal_temp',532)
         
+        now = dt.datetime.now()
+        now_str = now.strftime('%y%m%d%H%M%S')
+        tempname = 'Cal_'+now_str
+        autopath = os.path.join('C:/Users/nickp/Documents/Raman calibration files',str(tempname))
+        file = open(autopath,'w')
+        for line in np.arange(len(data)):
+            stringToWrite = str(wavelen[line])+','+str(wavenum[line])+','+str(data[line])+'\n' 
+            file.write(stringToWrite)    
+        file.close()
+        autopath_txt = os.path.join(autopath+'.txt')
+        os.rename(autopath,autopath_txt)
         
         
     def closeEvent(self,event):
