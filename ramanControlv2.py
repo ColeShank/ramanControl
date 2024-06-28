@@ -7,10 +7,22 @@ To Do:
 -make it so files don't overwrite, rather append _2, _3, ...
     - currently crashes if file already exists
 -Clean up when core functions are solid
+-Add button to display python code (and any other relevant files, e.g. 'mono.cfg') (?)
+-Package exe with the necessary files (there's only a couple)
+-
 
 
 Known Issues:
 -Homing doesn't always work, idk why :(
+
+
+
+For the next editor:
+-Paths are specific to nickp user and the raman system in the corner
+-
+
+
+
 
 '''
 
@@ -37,6 +49,15 @@ ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 plt.ion()
 
 '''
+## Does this work????
+'''
+global laser
+laser = 1
+
+def laserUpdate(wavl):
+    laser = float(wavl)
+
+'''
 These conversion functions show up like 3-4 times in different ways
 It would be good to condense to use common variables (from GUI) and remove redundancy
 '''
@@ -57,7 +78,9 @@ def takeSnapShot(fname, pos):
     global signal
     signal = []
     pixel = range(len(img[0]))
-    # are the next two lines redundant with the for loop later?
+    '''
+    Are the next two lines redundant with the for loop later?
+    '''
     for i in range(len(img[0])):
         signal.append(sum(img[:, i]))
 
@@ -101,6 +124,9 @@ def takeSnapShot2D(fname, pos):
     data = img1D.tolist()
 
     pixel = range(len(img[0]))
+    '''
+    Are the next two lines redundant with the for loop later?
+    '''
     for i in range(len(img[0])):
         signal.append(sum(img[:, i]))
 
@@ -124,10 +150,10 @@ def takeSnapShot2D(fname, pos):
 
 def takeSpectrum(start, stop, fname):
     ## file handling
-    fpath = os.path.join(path, fname)
+    #fpath = os.path.join(path, fname)
     #global file
-    file = open(fpath, 'w')
-    file.write('Wavelength(nm), Raman shift(cm^-1), Intensity(arb) \n')
+    #file = open(fpath, 'w')
+    #file.write('Wavelength(nm), Raman shift(cm^-1), Intensity(arb) \n')
     
     ## start by converting start and stop to nm
     nmStart = wavToNM(float(start))
@@ -170,13 +196,13 @@ def takeSpectrum(start, stop, fname):
             wavenum.append(wavNum)
             data.append(signal)
 
-    for line in np.arange(len(data)):
-        stringToWrite = str(wavelen[line])+','+str(wavenum[line])+','+str(data[line])+'\n' 
-        file.write(stringToWrite)  
-        
-    file.close()
-    fpath_txt = os.path.join(path,fname+'.txt')
-    os.rename(fpath,fpath_txt)
+    #for line in np.arange(len(data)):
+    #    stringToWrite = str(wavelen[line])+','+str(wavenum[line])+','+str(data[line])+'\n'
+    #    file.write(stringToWrite)  
+    
+    #file.close()
+    #fpath_txt = os.path.join(path,fname+'.txt')
+    #os.rename(fpath,fpath_txt)
     autoSave()
     print('Spectrum complete.')
     plt.plot(wavenum, data)
@@ -291,6 +317,8 @@ class Monochromator(object):
 
         ## This function performs the homing procedure of the monochromator
         ## See the mono manual for information about the separate parameters
+        
+        ## This doesn't work reliably for some reason
         
         self.approachWL(float(435))
         
@@ -407,6 +435,7 @@ class MainWindow(QWidgets.QMainWindow):
         tab_widget.addTab(tab3, "File Saving")
         tab_widget.addTab(tab4, "Shift Calculator")
         
+        
         ## update loop for CCD temperature
         self.update_timer = QtCore.QTimer(self)
         self.update_timer.start()
@@ -420,6 +449,7 @@ class MainWindow(QWidgets.QMainWindow):
         self.currentLaserWavelengthInput.setMaxLength(3)
         self.currentLaserWavelengthInput.setInputMask("999")
         self.currentLaserWavelengthInput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.currentLaserWavelengthInput.textChanged.connect(lambda: laserUpdate(self.currentLaserWavelengthInput.text()))
 
         ## create header for calibration
         self.calHeader = QWidgets.QLabel(self)
@@ -491,17 +521,20 @@ class MainWindow(QWidgets.QMainWindow):
 
         ## create exposure time input
         self.exposureTimeInput = QWidgets.QLineEdit(self)
-        self.exposureTimeInput.setMaxLength(6)
-        self.exposureTimeInput.setInputMask("999.99")
+        self.exposureTimeInput.setMaxLength(7)
+        self.exposureTimeInput.setInputMask("9999.99")
         self.exposureTimeInput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
         self.exposureTimeInput.textChanged.emit(self.exposureTimeInput.text())
+        self.exposureTimeInput.textChanged.connect(lambda: cam.set_attribute_value("Exposure Time", float(self.exposureTimeInput.text())))
 
+        ''' Deprecated
         ## create button to change exposure time
         self.expButton = QWidgets.QPushButton(self)
         self.expButton.setObjectName("expButton")
         self.expButton.clicked.connect(lambda: cam.set_attribute_value("Exposure Time", float(self.exposureTimeInput.text())))
         self.expButton.clicked.connect(lambda: self.statusBar().showMessage("Exposure time set to "+str(float(self.exposureTimeInput.text()))+" seconds.",3000))
         self.expButton.setText("Send exposure time (s)")
+        '''
 
         ## create header for snapshot
         self.snapshotHeader = QWidgets.QLabel(self)
@@ -589,6 +622,8 @@ class MainWindow(QWidgets.QMainWindow):
         self.shiftResponseInput.setMaxLength(6)
         self.shiftResponseInput.setInputMask("999.99")
         self.shiftResponseInput.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.shiftResponseInput.textChanged.connect(lambda: self.calculateShift())
+
         
         ## create shift wavenumber label
         self.shiftWN = QWidgets.QLabel(self)
@@ -605,6 +640,8 @@ class MainWindow(QWidgets.QMainWindow):
         self.shiftInputWN.setMaxLength(4)
         self.shiftInputWN.setInputMask("9999")
         self.shiftInputWN.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        self.shiftInputWN.textChanged.connect(lambda: self.calculateShift())
+
         
         ## create absolute nm label
         self.absoluteShift = QWidgets.QLabel(self)
@@ -614,12 +651,13 @@ class MainWindow(QWidgets.QMainWindow):
         self.relativeShift = QWidgets.QLabel(self)
         self.relativeShift.setObjectName("relativeShift")
         
+        ''' Deprecated
         ## create shift calculation button
         self.shiftButton = QWidgets.QPushButton(self)
         self.shiftButton.setObjectName("shiftButton")
         self.shiftButton.clicked.connect(lambda: self.calculateShift())
         self.shiftButton.setText("Calculate Shift")
-        
+        '''
         
         ## put widgets into the QFormLayout of tab1
         p1_vertical.addRow("Current Laser Wavelength (nm):", self.currentLaserWavelengthInput)
@@ -637,7 +675,7 @@ class MainWindow(QWidgets.QMainWindow):
         p2_vertical.addRow("Current temp", self.camTempLabel)
         p2_vertical.addRow("Calibrate CCD", self.ccdCalButton)
         p2_vertical.addRow("Exposure time (s)", self.exposureTimeInput)
-        p2_vertical.addRow(self.expButton)
+        #p2_vertical.addRow(self.expButton)
         p2_vertical.addRow(self.snapshotHeader)
         p2_vertical.addRow("Take 1D snapshot", self.camButton)
         p2_vertical.addRow("Take 2D snapshot", self.camButton2D)
@@ -662,13 +700,14 @@ class MainWindow(QWidgets.QMainWindow):
         p4_vertical.addRow("Raman shift (1/cm):", self.shiftInputWN)
         p4_vertical.addRow("Absolute wavelength (nm):", self.absoluteShift)
         p4_vertical.addRow("Relative wavelength (nm):", self.relativeShift)
-        p4_vertical.addRow(self.shiftButton)
+        #p4_vertical.addRow(self.shiftButton)
         
 
         ## set window title and add tab widget to main window
         self.setWindowTitle("Raman control")
         self.setCentralWidget(tab_widget)
-        
+      
+      
     def calibrateMono(self):
         if self.currentCounterInput.text() == '.':
             self.statusBar().showMessage("Error: no counter value input",3000)
@@ -726,7 +765,6 @@ class MainWindow(QWidgets.QMainWindow):
         self.config.write(f)
         self.currentMonoWavelengthLabel.setText('532.0')
         Mono1.current_wavelength = "532"
-
         
         ## take and save image to verify calibration
         takeSnapShot('cal_temp',532)
@@ -743,7 +781,6 @@ class MainWindow(QWidgets.QMainWindow):
         autopath_txt = os.path.join(autopath+'.txt')
         os.rename(autopath,autopath_txt)
         
-        
     def closeEvent(self,event):
         ## disconnects from instruments when X button is clicked
         Mono1.disconnect()
@@ -755,6 +792,7 @@ class MainWindow(QWidgets.QMainWindow):
         
     def initialize(self):
         ## pre-fills some data with standard values
+        laserUpdate(532)
         self.currentLaserWavelengthInput.setText("532")
         self.exposureTimeInput.setText("0.1")
         cam.set_attribute_value("Exposure Time", float(self.exposureTimeInput.text()))
@@ -768,7 +806,6 @@ class MainWindow(QWidgets.QMainWindow):
         path = os.path.join(self.currentDir.text())
         
     def calculateShift(self):
-
         if self.shiftResponseInput.text()+self.shiftInputWN.text() == '.':
             self.statusBar().showMessage("Error: must enter at least one input",2000)
             
@@ -788,7 +825,7 @@ class MainWindow(QWidgets.QMainWindow):
             self.absoluteShift.setText(str(nm))
             self.relativeShift.setText(str(round(nm - float(self.shiftExcitationInput.text()),2)))
 
-    
+
 def main():        
     app = QWidgets.QApplication(sys.argv)
     pixmap = QtGui.QPixmap('icon.png')
@@ -806,8 +843,8 @@ def main():
     Window.initialize()
     app.setWindowIcon(QtGui.QIcon('icon.png'))
     splash.finish(Window)
-    global laser
-    laser = float(Window.currentLaserWavelengthInput.text())
+    #global laser
+    #laser = float(Window.currentLaserWavelengthInput.text())
     sys.exit(app.exec_())
 
 
